@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Anki Vocabulary Assistant Pro",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Smart vocabulary capture with queue system, premium dictionaries (Oxford/Cambridge), and seamless Anki integration",
   
   "permissions": [
@@ -35,6 +35,9 @@
     {
       "matches": ["<all_urls>"],
       "js": [
+        "utils/constants.js",
+        "utils/helpers.js",
+        "utils/anki-helper.js",
         "utils/storage-manager.js",
         "utils/api-manager.js",
         "content.js"
