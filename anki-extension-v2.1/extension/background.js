@@ -1,6 +1,25 @@
-// background.js - Service Worker for Extension V2
+// background.js - Service Worker for Extension V2.1
 import StorageManager from './utils/storage-manager.js';
 import APIManager from './utils/api-manager.js';
+import { ankiHelper } from './utils/anki-helper.js';
+import {
+  validateWord,
+  validateSentence,
+  VocabError,
+  processBatch,
+  logError,
+  formatError,
+} from './utils/helpers.js';
+import {
+  TIMING,
+  STATUS,
+  ERROR_CODES,
+  LIMITS,
+  ANKI,
+  SOURCE_TYPES,
+  SOURCE_ICONS,
+  DEFAULT_FIELD_MAPPING,
+} from './utils/constants.js';
 
 // Initialize managers
 const storage = new StorageManager();
@@ -11,22 +30,26 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install') {
     // Set default settings
     await storage.saveSettings(storage.getDefaultSettings());
-    
+
     // Create context menus
     createContextMenus();
-    
+
     // Open welcome page
     chrome.tabs.create({
       url: chrome.runtime.getURL('library.html?welcome=true')
     });
   }
-  
-  // Initialize storage
+
+  // Initialize storage and API manager
   await storage.init();
-  await apiManager.init();
-  
+
+  const settings = await storage.getSettings();
+  await apiManager.init(settings, storage); // Pass storage for caching!
+
   // Update badge
   await storage.updateBadge();
+
+  console.log('Anki Vocabulary Assistant V2.1 - Background initialized');
 });
 
 // Create context menus
@@ -36,13 +59,13 @@ function createContextMenus() {
     title: 'Add "%s" to vocabulary queue',
     contexts: ['selection']
   });
-  
+
   chrome.contextMenus.create({
     id: 'add-sentence-cloze',
     title: 'Create cloze card from sentence',
     contexts: ['selection']
   });
-  
+
   chrome.contextMenus.create({
     id: 'open-library',
     title: 'Open Vocabulary Library',
@@ -52,13 +75,17 @@ function createContextMenus() {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === 'add-to-queue') {
-    const word = info.selectionText.trim();
-    await addWordToQueue(word, tab);
-  } else if (info.menuItemId === 'add-sentence-cloze') {
-    await addSentenceCloze(info.selectionText, tab);
-  } else if (info.menuItemId === 'open-library') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
+  try {
+    if (info.menuItemId === 'add-to-queue') {
+      const word = info.selectionText.trim();
+      await addWordToQueue(word, tab);
+    } else if (info.menuItemId === 'add-sentence-cloze') {
+      await addSentenceCloze(info.selectionText, tab);
+    } else if (info.menuItemId === 'open-library') {
+      chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
+    }
+  } catch (error) {
+    logError('Context Menu', error);
   }
 });
 
@@ -71,94 +98,113 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function handleMessage(request, sender) {
   try {
     switch (request.action) {
+      // Queue operations
       case 'addToQueue':
         return await addWordToQueue(request.word, sender.tab, request.context);
-        
+
       case 'enrichWord':
         return await enrichWord(request.itemId);
-        
+
       case 'batchEnrich':
         return await batchEnrich(request.itemIds);
-        
+
       case 'addToAnki':
         return await addToAnki(request.itemId);
-        
+
       case 'batchAddToAnki':
         return await batchAddToAnki(request.itemIds);
-        
+
       case 'getQueue':
         return await storage.getQueue(request.options);
-        
+
       case 'getQueueItem':
         return await storage.getQueueItem(request.id);
-        
+
       case 'updateQueueItem':
         return await storage.updateQueueItem(request.id, request.updates);
-        
+
       case 'deleteQueueItem':
         await storage.deleteQueueItem(request.id);
         return { success: true };
-        
+
       case 'clearQueue':
         await storage.clearQueue();
         return { success: true };
-        
+
+      // History operations
       case 'getHistory':
         return await storage.getHistory(request.options);
-        
+
       case 'searchHistory':
         return await storage.searchHistory(request.query);
-        
+
+      // Statistics
       case 'getStatistics':
         return await storage.getStatistics();
-        
+
+      // Settings
       case 'getSettings':
         return await storage.getSettings();
-        
+
       case 'saveSettings':
         await storage.saveSettings(request.settings);
-        await apiManager.init(request.settings);
+        await apiManager.init(request.settings, storage);
         return { success: true };
-        
+
+      // Anki operations
       case 'checkAnkiConnection':
         return await checkAnkiConnection();
-        
+
       case 'getAnkiDecks':
         return await getAnkiDecks();
-        
+
+      case 'getAnkiModels':
+        return await getAnkiModels();
+
+      case 'getModelFields':
+        return await getModelFields(request.modelName);
+
+      case 'suggestFieldMapping':
+        return suggestFieldMapping(request.modelFields);
+
+      case 'validateFieldMapping':
+        return validateFieldMapping(request.mapping, request.modelFields);
+
+      // Data management
       case 'exportData':
         return await storage.exportData();
-        
+
       case 'importData':
         await storage.importData(request.data);
         return { success: true };
-        
+
       default:
-        throw new Error(`Unknown action: ${request.action}`);
+        throw new VocabError(ERROR_CODES.UNKNOWN_ERROR, { action: request.action });
     }
   } catch (error) {
-    return { error: error.message };
+    logError('Message Handler', error, { action: request.action });
+    return { error: formatError(error) };
   }
 }
 
 // ==================== QUEUE OPERATIONS ====================
 
+/**
+ * Add word to queue with validation
+ */
 async function addWordToQueue(word, tab, context = {}) {
   try {
-    // Clean word
-    word = word.toLowerCase().trim().replace(/[^a-z\s-]/gi, '');
-    if (!word || word.split(' ').length > 3) {
-      throw new Error('Invalid word');
-    }
-    
+    // Validate word
+    const validatedWord = validateWord(word);
+
     // Create queue item
     const item = {
-      word: word,
+      word: validatedWord,
       sentence: context.sentence || '',
       source: {
-        type: detectSourceType(tab.url),
-        url: tab.url,
-        title: tab.title,
+        type: detectSourceType(tab?.url),
+        url: tab?.url || '',
+        title: tab?.title || '',
         timestamp: context.timestamp || null,
         thumbnail: context.thumbnail || null
       },
@@ -166,325 +212,373 @@ async function addWordToQueue(word, tab, context = {}) {
       priority: context.priority || 'normal',
       tags: context.tags || []
     };
-    
+
     const queueItem = await storage.addToQueue(item);
-    
+
     // Show notification
-    if ((await storage.getSettings()).showNotifications) {
+    const settings = await storage.getSettings();
+    if (settings.showNotifications) {
       showNotification(
         '✅ Added to Queue',
-        `"${word}" has been added to your vocabulary queue`
+        `"${validatedWord}" has been added to your vocabulary queue`
       );
     }
-    
+
     // Auto-enrich if enabled
-    const settings = await storage.getSettings();
     if (settings.autoEnrichOnAdd) {
-      setTimeout(() => enrichWord(queueItem.id), settings.enrichDelay || 2000);
+      setTimeout(() => enrichWord(queueItem.id), settings.enrichDelay || TIMING.ENRICH_DELAY);
     }
-    
+
     return { success: true, item: queueItem };
   } catch (error) {
-    return { error: error.message };
+    logError('Add To Queue', error, { word });
+    return { error: formatError(error) };
   }
 }
 
+/**
+ * Enrich word with definitions, audio, translations
+ */
 async function enrichWord(itemId) {
   try {
     const item = await storage.getQueueItem(itemId);
-    if (!item) throw new Error('Item not found');
-    
+    if (!item) {
+      throw new VocabError(ERROR_CODES.ITEM_NOT_FOUND);
+    }
+
     // Update status
-    await storage.updateQueueItem(itemId, { status: 'enriching' });
-    
-    // Enrich with APIs
+    await storage.updateQueueItem(itemId, { status: STATUS.ENRICHING });
+
+    // Enrich with APIs (with caching!)
     const enrichedData = await apiManager.enrichWord(item.word, item.context);
-    
+
     // Update item with enriched data
     await storage.updateQueueItem(itemId, {
-      status: 'enriched',
+      status: STATUS.ENRICHED,
       enrichedData: enrichedData
     });
-    
+
     return { success: true, data: enrichedData };
   } catch (error) {
     await storage.updateQueueItem(itemId, {
-      status: 'error',
+      status: STATUS.ERROR,
       error: error.message
     });
-    return { error: error.message };
+    logError('Enrich Word', error, { itemId });
+    return { error: formatError(error) };
   }
 }
 
+/**
+ * Batch enrich multiple words (3x faster with concurrent processing)
+ */
 async function batchEnrich(itemIds) {
-  const results = [];
-  
-  for (const id of itemIds) {
-    try {
-      const result = await enrichWord(id);
-      results.push({ id, success: true, result });
-      
-      // Delay to avoid rate limits
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    } catch (error) {
-      results.push({ id, success: false, error: error.message });
-    }
+  try {
+    const results = await processBatch(
+      itemIds,
+      async (id) => {
+        const result = await enrichWord(id);
+        if (result.error) throw new Error(result.error.message);
+        return result;
+      },
+      3, // Process 3 items concurrently
+      TIMING.BATCH_DELAY
+    );
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    return {
+      results,
+      summary: {
+        total: itemIds.length,
+        successful,
+        failed,
+      },
+    };
+  } catch (error) {
+    logError('Batch Enrich', error, { count: itemIds.length });
+    return { error: formatError(error) };
   }
-  
-  return { results };
 }
 
 // ==================== ANKI OPERATIONS ====================
 
+/**
+ * Check AnkiConnect connection
+ */
 async function checkAnkiConnection() {
   try {
-    const response = await fetch('http://localhost:8765', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'version',
-        version: 6
-      })
-    });
-    
-    const result = await response.json();
-    return { connected: !!result.result, version: result.result };
+    const result = await ankiHelper.checkConnection();
+    return result;
   } catch (error) {
-    return { connected: false, error: error.message };
+    logError('Check Anki Connection', error);
+    return { connected: false, error: formatError(error) };
   }
 }
 
+/**
+ * Get all Anki decks
+ */
 async function getAnkiDecks() {
   try {
-    const response = await fetch('http://localhost:8765', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'deckNames',
-        version: 6
-      })
-    });
-    
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
-    
-    return { decks: result.result };
+    const decks = await ankiHelper.getDeckNames();
+    return { decks };
   } catch (error) {
-    return { error: error.message };
+    logError('Get Anki Decks', error);
+    return { error: formatError(error) };
   }
 }
 
+/**
+ * Get all Anki note types (models)
+ */
+async function getAnkiModels() {
+  try {
+    const models = await ankiHelper.getModelNames();
+    return { models };
+  } catch (error) {
+    logError('Get Anki Models', error);
+    return { error: formatError(error) };
+  }
+}
+
+/**
+ * Get fields for a specific note type
+ */
+async function getModelFields(modelName) {
+  try {
+    const fields = await ankiHelper.getModelFieldNames(modelName);
+    return { fields };
+  } catch (error) {
+    logError('Get Model Fields', error, { modelName });
+    return { error: formatError(error) };
+  }
+}
+
+/**
+ * Suggest field mapping based on field names
+ */
+function suggestFieldMapping(modelFields) {
+  try {
+    const suggested = ankiHelper.suggestFieldMapping(modelFields, ANKI.EXTENSION_FIELDS);
+    return { mapping: suggested };
+  } catch (error) {
+    logError('Suggest Field Mapping', error);
+    return { error: formatError(error) };
+  }
+}
+
+/**
+ * Validate field mapping
+ */
+function validateFieldMapping(mapping, modelFields) {
+  try {
+    ankiHelper.validateFieldMapping(mapping, modelFields);
+    return { valid: true };
+  } catch (error) {
+    return { valid: false, error: error.message };
+  }
+}
+
+/**
+ * Add word to Anki using field mapping
+ */
 async function addToAnki(itemId) {
   try {
     const item = await storage.getQueueItem(itemId);
-    if (!item) throw new Error('Item not found');
-    if (!item.enrichedData) {
-      // Enrich first
-      await enrichWord(itemId);
-      return await addToAnki(itemId); // Retry
+    if (!item) {
+      throw new VocabError(ERROR_CODES.ITEM_NOT_FOUND);
     }
-    
+
+    // Enrich first if not enriched
+    if (!item.enrichedData) {
+      await enrichWord(itemId);
+      // Retry after enrichment
+      return await addToAnki(itemId);
+    }
+
     // Update status
-    await storage.updateQueueItem(itemId, { status: 'adding' });
-    
-    // Create Anki note
-    const note = await createAnkiNote(item);
-    
-    // Add to Anki via AnkiConnect
-    const response = await fetch('http://localhost:8765', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        action: 'addNote',
-        version: 6,
-        params: { note }
-      })
-    });
-    
-    const result = await response.json();
-    if (result.error) throw new Error(result.error);
-    
+    await storage.updateQueueItem(itemId, { status: STATUS.ADDING });
+
+    // Get settings with field mapping
+    const settings = await storage.getSettings();
+
+    // Use default mapping if not configured
+    const fieldMapping = settings.fieldMapping || DEFAULT_FIELD_MAPPING;
+
+    // Create Anki note using ankiHelper with field mapping
+    const note = await ankiHelper.createNote(item, fieldMapping, settings);
+
+    // Add to Anki
+    const noteId = await ankiHelper.addNote(note);
+
     // Move to history
-    await storage.addToHistory(item);
+    await storage.addToHistory({
+      ...item,
+      addedToAnkiAt: Date.now(),
+      ankiNoteId: noteId
+    });
     await storage.deleteQueueItem(itemId);
-    
+
     // Show notification
-    showNotification(
-      '✅ Added to Anki',
-      `"${item.word}" has been added to your Anki deck`
-    );
-    
-    return { success: true, noteId: result.result };
+    const notifSettings = await storage.getSettings();
+    if (notifSettings.showNotifications) {
+      showNotification(
+        '✅ Added to Anki',
+        `"${item.word}" has been added to your Anki deck`
+      );
+    }
+
+    return { success: true, noteId };
   } catch (error) {
     await storage.updateQueueItem(itemId, {
-      status: 'error',
+      status: STATUS.ERROR,
       error: error.message
     });
-    return { error: error.message };
+    logError('Add To Anki', error, { itemId });
+    return { error: formatError(error) };
   }
 }
 
+/**
+ * Batch add multiple words to Anki
+ */
 async function batchAddToAnki(itemIds) {
-  const results = [];
-  
-  for (const id of itemIds) {
-    try {
-      const result = await addToAnki(id);
-      results.push({ id, success: true, result });
-      
-      // Small delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      results.push({ id, success: false, error: error.message });
-    }
-  }
-  
-  return { results };
-}
-
-async function createAnkiNote(item) {
-  const data = item.enrichedData;
-  const settings = await storage.getSettings();
-  
-  // Download and store audio
-  let audioField = '';
-  if (data.audio && data.audio.length > 0) {
-    const audioUrl = data.audio[0].url;
-    const audioFilename = await downloadAndStoreAudio(item.word, audioUrl);
-    if (audioFilename) {
-      audioField = `[sound:${audioFilename}]`;
-    }
-  }
-  
-  // Create note
-  const note = {
-    deckName: item.targetDeck,
-    modelName: 'EnglishVocabulary_VN',
-    fields: {
-      Word: item.word,
-      IPA: data.ipa || '',
-      Vietnamese: data.vietnamese || '',
-      Part_of_Speech: data.partOfSpeech || '',
-      Audio: audioField,
-      Example_EN: item.context.sentence || (data.examples?.[0] || ''),
-      Example_VN: await apiManager.getVietnameseTranslation(item.context.sentence || data.examples?.[0] || ''),
-      English_Definition: data.definitions?.[0] || '',
-      Image: '',
-      Synonyms: data.synonyms?.join(', ') || '',
-      Antonyms: data.antonyms?.join(', ') || '',
-      Collocations: data.collocations?.join(', ') || '',
-      Word_Family: '',
-      Etymology: data.etymology || '',
-      Hints: apiManager.generateMemoryHint(item.word)
-    },
-    tags: [
-      'vocab-assistant',
-      item.context.source.type,
-      new Date().toISOString().split('T')[0]
-    ].concat(item.metadata.tags || []),
-    options: {
-      allowDuplicate: false
-    }
-  };
-  
-  return note;
-}
-
-async function downloadAndStoreAudio(word, audioUrl) {
   try {
-    const response = await fetch(audioUrl);
-    const audioBlob = await response.blob();
-    
-    // Convert to base64
-    const reader = new FileReader();
-    return new Promise((resolve, reject) => {
-      reader.onloadend = async () => {
-        const base64Audio = reader.result.split(',')[1];
-        const filename = `${word}_${Date.now()}.mp3`;
-        
-        // Store in Anki media folder
-        const storeResponse = await fetch('http://localhost:8765', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'storeMediaFile',
-            version: 6,
-            params: {
-              filename: filename,
-              data: base64Audio
-            }
-          })
-        });
-        
-        const result = await storeResponse.json();
-        if (result.error) reject(result.error);
-        else resolve(filename);
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(audioBlob);
-    });
+    const results = await processBatch(
+      itemIds,
+      async (id) => {
+        const result = await addToAnki(id);
+        if (result.error) throw new Error(result.error.message);
+        return result;
+      },
+      2, // Process 2 items concurrently (slower for Anki)
+      TIMING.ANKI_DELAY
+    );
+
+    const successful = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    return {
+      results,
+      summary: {
+        total: itemIds.length,
+        successful,
+        failed,
+      },
+    };
   } catch (error) {
-    console.error('Audio download error:', error);
-    return null;
+    logError('Batch Add To Anki', error, { count: itemIds.length });
+    return { error: formatError(error) };
   }
 }
 
 // ==================== UTILITIES ====================
 
+/**
+ * Detect source type from URL
+ */
 function detectSourceType(url) {
-  if (url.includes('youtube.com')) return 'youtube';
-  if (url.includes('wikipedia.org')) return 'wikipedia';
-  if (url.includes('.pdf')) return 'pdf';
-  return 'web';
+  if (!url) return SOURCE_TYPES.WEB;
+
+  if (url.includes('youtube.com')) return SOURCE_TYPES.YOUTUBE;
+  if (url.includes('wikipedia.org')) return SOURCE_TYPES.WIKIPEDIA;
+  if (url.includes('medium.com')) return SOURCE_TYPES.ARTICLE;
+  if (url.endsWith('.pdf')) return SOURCE_TYPES.PDF;
+
+  return SOURCE_TYPES.WEB;
 }
 
+/**
+ * Show notification
+ */
 function showNotification(title, message) {
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'icons/icon48.png',
-    title: title,
-    message: message,
-    priority: 1
-  });
-}
-
-async function addSentenceCloze(sentence, tab) {
-  // Extract words from sentence
-  const words = sentence.trim().split(/\s+/)
-    .filter(w => w.length > 3)
-    .map(w => w.replace(/[^a-z]/gi, ''));
-  
-  if (words.length === 0) return { error: 'No valid words found' };
-  
-  // Add each word to queue
-  for (const word of words) {
-    await addWordToQueue(word, tab, {
-      sentence: sentence,
-      tags: ['cloze']
+  try {
+    chrome.notifications.create({
+      type: 'basic',
+      iconUrl: 'icons/icon48.png',
+      title: title,
+      message: message,
+      priority: 1
     });
+  } catch (error) {
+    console.error('Notification error:', error);
   }
-  
-  return { success: true, wordsAdded: words.length };
 }
 
-// Keyboard shortcut handling
+/**
+ * Add sentence cloze (extract words from sentence)
+ */
+async function addSentenceCloze(sentence, tab) {
+  try {
+    const validatedSentence = validateSentence(sentence);
+
+    // Extract words from sentence
+    const words = validatedSentence.trim().split(/\s+/)
+      .filter(w => w.length > 3)
+      .map(w => w.replace(/[^a-z'-]/gi, ''))
+      .filter(w => w);
+
+    if (words.length === 0) {
+      throw new VocabError(ERROR_CODES.INVALID_WORD);
+    }
+
+    // Add each word to queue
+    const results = [];
+    for (const word of words.slice(0, LIMITS.MAX_WORDS_IN_PHRASE)) {
+      try {
+        const result = await addWordToQueue(word, tab, {
+          sentence: validatedSentence,
+          tags: ['cloze']
+        });
+        if (result.success) results.push(result);
+      } catch (error) {
+        logError('Add Cloze Word', error, { word });
+      }
+    }
+
+    return { success: true, wordsAdded: results.length };
+  } catch (error) {
+    logError('Add Sentence Cloze', error);
+    return { error: formatError(error) };
+  }
+}
+
+// ==================== KEYBOARD SHORTCUTS ====================
+
 chrome.commands.onCommand.addListener((command) => {
-  if (command === 'add-to-queue') {
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-      chrome.tabs.sendMessage(tabs[0].id, { action: 'captureSelection' });
-    });
-  } else if (command === 'open-library') {
-    chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
+  try {
+    if (command === 'add-to-queue') {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (tabs[0]) {
+          chrome.tabs.sendMessage(tabs[0].id, { action: 'captureSelection' });
+        }
+      });
+    } else if (command === 'open-library') {
+      chrome.tabs.create({ url: chrome.runtime.getURL('library.html') });
+    }
+  } catch (error) {
+    logError('Command Handler', error, { command });
   }
 });
+
+// ==================== ALARMS ====================
 
 // Alarm for cache cleanup (daily)
-chrome.alarms.create('cleanupCache', { periodInMinutes: 1440 }); // 24 hours
+chrome.alarms.create('cleanupCache', {
+  periodInMinutes: TIMING.CACHE_CLEANUP_INTERVAL
+});
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
-  if (alarm.name === 'cleanupCache') {
-    await storage.clearExpiredCache();
+  try {
+    if (alarm.name === 'cleanupCache') {
+      await storage.clearExpiredCache();
+      console.log('Cache cleanup completed');
+    }
+  } catch (error) {
+    logError('Alarm Handler', error, { alarm: alarm.name });
   }
 });
 
-console.log('Anki Vocabulary Assistant V2 - Background Service Worker loaded');
+console.log('Anki Vocabulary Assistant V2.1 - Background Service Worker loaded');
