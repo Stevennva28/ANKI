@@ -82,6 +82,13 @@ export const ERROR_CODES = {
   NO_AUDIO_FOUND: 5003,
   TRANSLATION_FAILED: 5004,
 
+  // AI errors (6xxx)
+  AI_NOT_CONFIGURED: 6001,
+  AI_REQUEST_FAILED: 6002,
+  AI_RATE_LIMIT: 6003,
+  AI_INVALID_RESPONSE: 6004,
+  INVALID_CONFIG: 6005,
+
   // General errors (9xxx)
   UNKNOWN_ERROR: 9001,
   OPERATION_CANCELLED: 9002,
@@ -120,6 +127,12 @@ export const ERROR_MESSAGES = {
   [ERROR_CODES.NO_DEFINITION_FOUND]: 'No definition found for this word',
   [ERROR_CODES.NO_AUDIO_FOUND]: 'No audio pronunciation found',
   [ERROR_CODES.TRANSLATION_FAILED]: 'Translation failed',
+
+  [ERROR_CODES.AI_NOT_CONFIGURED]: 'AI is not configured. Please add your API key in settings.',
+  [ERROR_CODES.AI_REQUEST_FAILED]: 'AI request failed. Please check your API key and try again.',
+  [ERROR_CODES.AI_RATE_LIMIT]: 'AI rate limit exceeded. Please wait and try again.',
+  [ERROR_CODES.AI_INVALID_RESPONSE]: 'Invalid response from AI',
+  [ERROR_CODES.INVALID_CONFIG]: 'Invalid configuration',
 
   [ERROR_CODES.UNKNOWN_ERROR]: 'An unknown error occurred',
   [ERROR_CODES.OPERATION_CANCELLED]: 'Operation was cancelled',
