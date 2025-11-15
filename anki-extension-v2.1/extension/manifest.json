@@ -34,14 +34,7 @@
   "content_scripts": [
     {
       "matches": ["<all_urls>"],
-      "js": [
-        "utils/constants.js",
-        "utils/helpers.js",
-        "utils/anki-helper.js",
-        "utils/storage-manager.js",
-        "utils/api-manager.js",
-        "content.js"
-      ],
+      "js": ["content-loader.js"],
       "css": ["styles/content.css"],
       "run_at": "document_idle"
     }
@@ -85,6 +78,8 @@
   "web_accessible_resources": [
     {
       "resources": [
+        "content.js",
+        "utils/*.js",
         "styles/*.css",
         "icons/*.png",
         "library.html"
