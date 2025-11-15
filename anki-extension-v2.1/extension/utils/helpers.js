@@ -475,38 +475,3 @@ export function omit(obj, keys) {
   keys.forEach(key => delete result[key]);
   return result;
 }
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    VocabError,
-    formatError,
-    logError,
-    validateWord,
-    validateSentence,
-    validateRequiredFields,
-    sanitizeHTML,
-    createSafeElement,
-    stripHTML,
-    cleanText,
-    delay,
-    retryWithBackoff,
-    debounce,
-    throttle,
-    processBatch,
-    rateLimiter,
-    fetchWithTimeout,
-    fetchWithRetry,
-    capitalize,
-    truncate,
-    formatTimestamp,
-    formatDuration,
-    unique,
-    shuffle,
-    groupBy,
-    deepClone,
-    deepMerge,
-    pick,
-    omit,
-  };
-}

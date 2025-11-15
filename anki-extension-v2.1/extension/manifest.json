@@ -78,7 +78,6 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "content.js",
         "content-premium.js",
         "ui/*.js",
         "utils/*.js",
