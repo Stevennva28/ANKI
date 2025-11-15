@@ -228,12 +228,15 @@ function detectAccent(audioUrl) {
 function extractWordFamily(meanings) {
   const family = {};
 
+  // Extract different parts of speech and their base forms
   meanings.forEach(m => {
     const pos = m.partOfSpeech.toLowerCase();
-    if (pos.includes('noun')) family.noun = m.definition.split(' ')[0];
-    if (pos.includes('verb')) family.verb = m.definition.split(' ')[0];
-    if (pos.includes('adjective')) family.adjective = m.definition.split(' ')[0];
-    if (pos.includes('adverb')) family.adverb = m.definition.split(' ')[0];
+    // Store the word form for each part of speech (not definition)
+    // This is a simplified version - ideally would use lemmatization
+    if (pos.includes('noun') && !family.noun) family.noun = pos;
+    if (pos.includes('verb') && !family.verb) family.verb = pos;
+    if (pos.includes('adjective') && !family.adjective) family.adjective = pos;
+    if (pos.includes('adverb') && !family.adverb) family.adverb = pos;
   });
 
   return family;

@@ -273,24 +273,3 @@ export const DEFAULT_FIELD_MAPPING = {
   'Etymology': 'etymology',
   'Hints': 'hints',
 };
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = {
-    TIMING,
-    LIMITS,
-    ERROR_CODES,
-    ERROR_MESSAGES,
-    ANKI,
-    API_SOURCES,
-    SOURCE_TYPES,
-    SOURCE_ICONS,
-    STATUS,
-    PRIORITY,
-    PATTERNS,
-    NOTIFICATION_TYPES,
-    CSS_CLASSES,
-    STORAGE_KEYS,
-    DEFAULT_FIELD_MAPPING,
-  };
-}

@@ -425,9 +425,8 @@ async function addToAnki(itemId) {
     });
     await storage.deleteQueueItem(itemId);
 
-    // Show notification
-    const notifSettings = await storage.getSettings();
-    if (notifSettings.showNotifications) {
+    // Show notification (reuse settings from line 409)
+    if (settings.showNotifications) {
       showNotification(
         '✅ Added to Anki',
         `"${item.word}" has been added to your Anki deck`
