@@ -111,6 +111,10 @@ async function handleMessage(request, sender) {
       case 'addToAnki':
         return await addToAnki(request.itemId);
 
+      case 'addToAnkiNow':
+        // Premium popup: Add word directly to Anki (queue → enrich → anki)
+        return await addToAnkiNow(request.word, sender.tab, request.context, request.data);
+
       case 'batchAddToAnki':
         return await batchAddToAnki(request.itemIds);
 
@@ -470,6 +474,62 @@ async function batchAddToAnki(itemIds) {
     };
   } catch (error) {
     logError('Batch Add To Anki', error, { count: itemIds.length });
+    return { error: formatError(error) };
+  }
+}
+
+/**
+ * Add word to Anki immediately (Premium popup flow)
+ * Steps: addToQueue → enrichWord → addToAnki
+ */
+async function addToAnkiNow(word, tab, context, premiumData) {
+  try {
+    // Step 1: Add to queue
+    const queueResult = await addWordToQueue(word, tab, context);
+
+    if (queueResult.error) {
+      return { error: queueResult.error };
+    }
+
+    const itemId = queueResult.item.id;
+
+    // If premium data provided (multiple meanings selected), save it
+    if (premiumData && premiumData.selectedMeanings) {
+      await storage.updateQueueItem(itemId, {
+        premiumData: premiumData.selectedMeanings,
+      });
+    }
+
+    // Step 2: Enrich word
+    const enrichResult = await enrichWord(itemId);
+
+    if (enrichResult.error) {
+      // Continue even if enrichment fails - we still have basic data
+      console.warn('Enrichment failed, proceeding with basic data:', enrichResult.error);
+    }
+
+    // Step 3: Add to Anki
+    const ankiResult = await addToAnki(itemId);
+
+    if (ankiResult.error) {
+      return { error: ankiResult.error };
+    }
+
+    // Step 4: Show notification
+    showNotification(
+      `✅ "${word}" added to Anki!`,
+      `Successfully created card in Anki`,
+      'success'
+    );
+
+    return {
+      success: true,
+      itemId,
+      noteId: ankiResult.noteId,
+      message: `"${word}" added to Anki successfully`,
+    };
+  } catch (error) {
+    logError('Add To Anki Now', error, { word });
     return { error: formatError(error) };
   }
 }
