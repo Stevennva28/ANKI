@@ -1,0 +1,247 @@
+/* content.css - Styles for content script elements */
+.vocab-assistant-popup {
+  position: absolute;
+  z-index: 999999;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  padding: 20px;
+  min-width: 350px;
+  max-width: 450px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e293b;
+}
+
+.vocab-assistant-popup .popup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.vocab-assistant-popup h3 {
+  margin: 0;
+  font-size: 20px;
+  color: #667eea;
+}
+
+.vocab-assistant-popup .close-btn {
+  background: none;
+  border: none;
+  font-size: 24px;
+  cursor: pointer;
+  color: #94a3b8;
+  padding: 0;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.vocab-assistant-popup .close-btn:hover {
+  color: #64748b;
+}
+
+.vocab-assistant-popup .popup-body {
+  margin: 15px 0;
+  min-height: 80px;
+}
+
+.vocab-assistant-popup .loading {
+  text-align: center;
+  padding: 20px;
+  color: #94a3b8;
+}
+
+.vocab-assistant-popup .preview {
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.vocab-assistant-popup .ipa {
+  font-family: 'Arial Unicode MS', Arial;
+  color: #667eea;
+  font-size: 16px;
+  margin-bottom: 10px;
+}
+
+.vocab-assistant-popup .definition,
+.vocab-assistant-popup .example,
+.vocab-assistant-popup .vietnamese {
+  margin: 8px 0;
+}
+
+.vocab-assistant-popup .definition strong,
+.vocab-assistant-popup .example strong,
+.vocab-assistant-popup .vietnamese strong {
+  color: #475569;
+}
+
+.vocab-assistant-popup .vietnamese {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.vocab-assistant-popup .popup-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 15px;
+}
+
+.vocab-assistant-popup .btn {
+  flex: 1;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.vocab-assistant-popup .btn-primary {
+  background: #667eea;
+  color: white;
+}
+
+.vocab-assistant-popup .btn-primary:hover {
+  background: #5568d3;
+}
+
+.vocab-assistant-popup .btn-secondary {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.vocab-assistant-popup .btn-secondary:hover {
+  background: #cbd5e1;
+}
+
+/* Sentence popup specific styles */
+.vocab-assistant-popup.sentence-popup {
+  min-width: 400px;
+  max-width: 500px;
+}
+
+.vocab-assistant-popup .sentence-text {
+  background: #f1f5f9;
+  padding: 12px;
+  border-radius: 8px;
+  font-style: italic;
+  margin-bottom: 15px;
+}
+
+.vocab-assistant-popup .word-select label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #475569;
+}
+
+.vocab-assistant-popup .word-list {
+  max-height: 200px;
+  overflow-y: auto;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 8px;
+}
+
+.vocab-assistant-popup .word-list label {
+  display: block;
+  padding: 5px;
+  cursor: pointer;
+  font-weight: normal;
+}
+
+.vocab-assistant-popup .word-list label:hover {
+  background: #e2e8f0;
+  border-radius: 4px;
+}
+
+/* Toast notifications */
+.vocab-assistant-toast {
+  position: fixed;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1000000;
+  background: white;
+  padding: 15px 20px;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  transform: translateY(100px);
+  opacity: 0;
+  transition: all 0.3s ease;
+}
+
+.vocab-assistant-toast.show {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.vocab-assistant-toast.toast-success {
+  border-left: 4px solid #22c55e;
+  color: #166534;
+}
+
+.vocab-assistant-toast.toast-error {
+  border-left: 4px solid #ef4444;
+  color: #991b1b;
+}
+
+.vocab-assistant-toast.toast-warning {
+  border-left: 4px solid #f59e0b;
+  color: #92400e;
+}
+
+.vocab-assistant-toast.toast-info {
+  border-left: 4px solid #3b82f6;
+  color: #1e40af;
+}
+
+/* YouTube subtitle enhancements */
+.vocab-enhanced .clickable-word {
+  display: inline-block;
+  padding: 0 2px;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.vocab-enhanced .clickable-word:hover {
+  background: rgba(102, 126, 234, 0.3);
+  cursor: pointer;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .vocab-assistant-popup {
+    background: #1e293b;
+    color: #f1f5f9;
+  }
+  
+  .vocab-assistant-popup .popup-header {
+    border-bottom-color: #334155;
+  }
+  
+  .vocab-assistant-popup .sentence-text {
+    background: #334155;
+  }
+  
+  .vocab-assistant-popup .word-list {
+    background: #334155;
+  }
+  
+  .vocab-assistant-popup .btn-secondary {
+    background: #334155;
+    color: #f1f5f9;
+  }
+  
+  .vocab-assistant-toast {
+    background: #1e293b;
+  }
+}

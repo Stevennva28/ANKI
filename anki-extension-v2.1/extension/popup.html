@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vocabulary Queue</title>
+  <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <header class="popup-header">
+      <h1>📚 Vocabulary Queue</h1>
+      <div class="queue-count" id="queueCount">0</div>
+    </header>
+
+    <!-- Quick Stats -->
+    <div class="quick-stats">
+      <div class="stat">
+        <span class="stat-value" id="todayCount">0</span>
+        <span class="stat-label">Today</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="weekCount">0</span>
+        <span class="stat-label">This Week</span>
+      </div>
+      <div class="stat">
+        <span class="stat-value" id="streakCount">0</span>
+        <span class="stat-label">Streak</span>
+      </div>
+    </div>
+
+    <!-- Queue Items -->
+    <div class="queue-list" id="queueList">
+      <div class="empty-state">
+        <p>No words in queue</p>
+        <small>Double-click any word on a webpage to add it</small>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <footer class="popup-footer">
+      <button class="btn btn-primary" id="enrichAllBtn">
+        ⚡ Enrich All
+      </button>
+      <button class="btn btn-success" id="addAllBtn">
+        ✅ Add All to Anki
+      </button>
+      <button class="btn btn-secondary" id="openLibraryBtn">
+        📖 Open Library
+      </button>
+    </footer>
+
+    <!-- Anki Connection Status -->
+    <div class="connection-status" id="connectionStatus">
+      <span class="status-dot"></span>
+      <span class="status-text">Checking Anki...</span>
+    </div>
+  </div>
+
+  <script src="utils/storage-manager.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
